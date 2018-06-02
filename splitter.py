@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 
 """
-Samsung's S7 Motion Photo splitter.
-S7 generates a container which encapsulates picture and video. The first part
-is a JPEG with its usual footer plus Samsung's own (MotionPhoto_Data). Second
-part is the video.
+Google Camera Motion Photo splitter.
+Google Camera generates a container which encapsulates picture and video. The first part
+is a JPEG, ending with the EOI marker (0xFF 0xD9). Second part is the video.
 
 Algorithm: 
 Count the bytes for each offset and write the files.
-JPEG: byte zero to samsungs footer end
-MP4: JPEG's footer + 1 to end of file (size of the file)
+JPEG: byte zero to JPEG EOI
+MP4: JPEG's EOI + 1 to end of file (size of the file)
 
 """
 
@@ -18,15 +17,8 @@ from os import path
 from mmap import mmap
 
 
-__author__ = "Christian Lete"
-__license__ = "Apache 2.0"
-__version__ = "0.9"
-__maintainer__ = "Christian Lete"
-__email__ = "christian.lete {at} gmail com"
-
-#End of picture signature - not JPEG footer but "MotionPhoto_Data"
-eop = "\x4D\x6F\x74\x69\x6F\x6E\x50\x68\x6F\x74\x6F\x5F\x44\x61\x74\x61"
-
+# beginning of MP4: EOI + null bytes + 'ftypmp4'
+eop = "\xFF\xD9\x00\x00\x00\x18\x66\x74\x79\x70\x6D\x70\x34"
 
 
 def write_files(fname,jpeg,mp4):
@@ -56,20 +48,20 @@ def spliter(fname):
   with open(fname,'r+b') as f:
     mm = mmap(f.fileno(),0)
     file_size = mm.size()
-    # size of the file - len of the samsung magic = processed file
-    magic_samsung = mm.find(eop)
-    magic_samsung_lim = file_size - len(eop)
+    # size of the file - len of the magic = processed file
+    magic = mm.find(eop)
+    magic_lim = file_size - len(eop)
     #Do not process if magic is not found, and if found at the end
-    if magic_samsung == -1 or  magic_samsung == magic_samsung_lim:
+    if magic == -1 or magic == magic_lim:
       sys.exit("Error: file %s has no motion photo" % fname)
     else:
-      samsung_jpeg_offset = magic_samsung + len(eop)
-      mpeg_start = samsung_jpeg_offset + 1
+      jpeg_offset = magic + 2 # EOI
+      mpeg_start = jpeg_offset + 1
       mpeg_end = file_size
   
       #JPEG  here
       mm.seek(0)
-      jpeg = mm.read(samsung_jpeg_offset)
+      jpeg = mm.read(jpeg_offset)
 
       #MP4 here
       #Start in the first byte of the MP4 container
